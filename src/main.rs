@@ -84,6 +84,8 @@ async fn main() {
 }
 
 async fn handler(mut incoming_stream: TcpStream, query: Query) {
+	info!("New connection from: {:?}", incoming_stream.peer_addr());
+
 	const HEADER_FILTER_LEN: usize = 17;
 
 	let mut body = Vec::new();
@@ -110,6 +112,7 @@ async fn handler(mut incoming_stream: TcpStream, query: Query) {
 			}
 		}
 		if let Some(e) = err {
+			info!("Error reading header: {:?}", e);
 			return Err(e);
 		}
 		Ok(buf)
@@ -117,11 +120,15 @@ async fn handler(mut incoming_stream: TcpStream, query: Query) {
 	.await
 	{
 		Ok(Ok(header)) => header,
-		_ => return
+		_ => {
+			info!("Timeout reading header");
+			return;
+		}
 	};
 
 	// malformed HTTP header
 	if header.len() < HEADER_FILTER_LEN {
+		info!("Malformed HTTP header");
 		return;
 	}
 
@@ -155,12 +162,14 @@ async fn handler(mut incoming_stream: TcpStream, query: Query) {
 				}
 			}
 			if let Some(e) = err {
+				info!("Error reading header 2: {:?}", e);
 				return Err(e);
 			}
 			Ok(())
 		})
 		.await
 		{
+			info!("Timeout reading header 2: {:?}", e);
 			return;
 		}
 
@@ -187,17 +196,22 @@ async fn handler(mut incoming_stream: TcpStream, query: Query) {
 		let content_length = match content_length {
 			Some(content_length) => content_length,
 			// i don't think requests to /inbox will actually have chunked encoding
-			_ => return
+			_ => {
+				info!("content-length");
+				return;
+			}
 		};
 		let content_type = if let Some(content_type) = content_type {
 			content_type
 		} else {
+			info!("content-type");
 			return;
 		};
 
 		if !content_type.starts_with("application/activity+json")
 			&& !content_type.starts_with("application/ld+json")
 		{
+			info!("content-type mismatch");
 			return;
 		}
 
@@ -217,16 +231,19 @@ async fn handler(mut incoming_stream: TcpStream, query: Query) {
 				}
 			}
 			if let Some(e) = err {
+				info!("Error reading body: {:?}", e);
 				return Err(e);
 			}
 			Ok(())
 		})
 		.await
 		{
+			info!("Timeout reading body: {:?}", e);
 			return;
 		}
 
 		if body.len() != content_length {
+			info!("content-length mismatch");
 			return;
 		}
 
@@ -235,7 +252,10 @@ async fn handler(mut incoming_stream: TcpStream, query: Query) {
 
 		let ap_json: Value = match serde_json::from_slice(&body) {
 			Ok(ap_json) => ap_json,
-			Err(_) => return
+			Err(_) => {
+				info!("Invalid JSON");
+				return;
+			}
 		};
 
 		// spam detection part
@@ -249,62 +269,75 @@ async fn handler(mut incoming_stream: TcpStream, query: Query) {
 			.and_then(|o| o.get("type"))
 			.and_then(|t| t.as_str())
 			.and_then(|t| if t == "Create" { Some(()) } else { None })
-			.is_none()
+			.is_some()
 		{
-			return;
-		}
-
-		let actor = match ap_json
-			.as_object()
-			.and_then(|o| o.get("actor"))
-			.and_then(|a| a.as_str())
-			.and_then(|a| a.parse::<Url>().ok())
-		{
-			Some(actor) => actor,
-			_ => return
-		};
-		let host = match actor.host_str() {
-			Some(host) => host,
-			_ => return
-		};
-		let instance_stats = match query.get_instance_stats(host).await {
-			Ok(Some(instance_stats)) => instance_stats,
-			_ => {
-				info!("Instance not found: {}", host);
-				return;
-			}
-		};
-		if instance_stats.followers == 0 && instance_stats.following == 0 {
-			let user_stats = match query.get_user(actor.as_str()).await {
-				Ok(Some(user_stats)) => user_stats,
+			let actor = match ap_json
+				.as_object()
+				.and_then(|o| o.get("actor"))
+				.and_then(|a| a.as_str())
+				.and_then(|a| a.parse::<Url>().ok())
+			{
+				Some(actor) => actor,
 				_ => {
-					info!("User not found: {}", actor);
+					info!("Invalid actor");
 					return;
 				}
 			};
-			if user_stats.followers == 0 && user_stats.following == 0 {
-				info!("Spam detected: {}", actor);
-				return;
+			let host = match actor.host_str() {
+				Some(host) => host,
+				_ => {
+					info!("Invalid host");
+					return;
+				}
+			};
+			let instance_stats = match query.get_instance_stats(host).await {
+				Ok(Some(instance_stats)) => instance_stats,
+				_ => {
+					info!("Instance not found: {}", host);
+					return;
+				}
+			};
+			if instance_stats.followers == 0 && instance_stats.following == 0 {
+				let user_stats = match query.get_user(actor.as_str()).await {
+					Ok(Some(user_stats)) => user_stats,
+					_ => {
+						info!("User not found: {}", actor);
+						return;
+					}
+				};
+				if user_stats.followers == 0 && user_stats.following == 0 {
+					info!("Spam detected: {}", actor);
+					return;
+				}
 			}
 		}
 	}
+
+	info!("Attempting Relay");
 
 	// passed all checks, admit
 	let mut server_stream = match TcpStream::connect((AP_SERVER.wait().0, AP_SERVER.wait().1)).await
 	{
 		Ok(server_stream) => server_stream,
-		_ => return
+		_ => {
+			info!("Could not connect to AP server");
+			return;
+		}
 	};
 
 	// send existing data
 	if let Err(_e) = server_stream.write_all(&header).await {
+		info!("Could not write header to AP server");
 		return;
 	}
 	if !body.is_empty() {
 		if let Err(_e) = server_stream.write_all(&body).await {
+			info!("Could not write body to AP server");
 			return;
 		}
 	}
+
+	info!("Relaying");
 
 	// this buffers, if issues arise, just spawn two threads for each direction
 	// and use io::copy_buf with buffer size of 1
