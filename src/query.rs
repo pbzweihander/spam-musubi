@@ -46,7 +46,7 @@ impl Query {
 		let client = self.pool.get().await?;
 		let row = client
 			.query(
-				"SELECT followersCount, followingCount, notesCount FROM user WHERE uri = $1",
+				r#"SELECT "followersCount", "followingCount", "notesCount" FROM user WHERE uri = $1"#,
 				&[&uri],
 			)
 			.await?;
@@ -64,7 +64,7 @@ impl Query {
 		let client = self.pool.get().await?;
 		let row = client
 			.query(
-				"SELECT followersCount, followingCount, notesCount FROM instance WHERE host = $1",
+				r#"SELECT "followersCount", "followingCount", "notesCount" FROM instance WHERE host = $1"#,
 				&[&host],
 			)
 			.await?;
