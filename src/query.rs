@@ -1,9 +1,6 @@
 use deadpool_postgres::{
 	tokio_postgres::{error::Error as PgError, NoTls},
-	Config,
-	CreatePoolError,
-	Pool,
-	Runtime
+	Config, CreatePoolError, Pool, Runtime,
 };
 use thiserror::Error;
 use tracing::*;
@@ -13,29 +10,29 @@ pub enum QueryError {
 	#[error("Database error: {0}")]
 	DbError(#[from] PgError),
 	#[error("Pool error: {0}")]
-	PoolError(#[from] deadpool_postgres::PoolError)
+	PoolError(#[from] deadpool_postgres::PoolError),
 }
 
 #[derive(Clone)]
 pub struct Query {
-	pool: Pool
+	pool: Pool,
 }
 
 pub struct User {
 	pub followers: i32,
 	pub following: i32,
-	pub notes: i32
+	pub notes: i32,
 }
 
 pub struct InstanceStats {
 	pub followers: i32,
 	pub following: i32,
-	pub notes: i32
+	pub notes: i32,
 }
 
 impl Query {
 	pub fn init(
-		host: &str, user: &str, password: &str, db_name: &str
+		host: &str, user: &str, password: &str, db_name: &str,
 	) -> Result<Self, CreatePoolError> {
 		let mut cfg = Config::new();
 		cfg.host = Some(host.to_owned());
@@ -53,7 +50,7 @@ impl Query {
 		let row = client
 			.query(
 				r#"SELECT "followersCount", "followingCount", "notesCount" FROM user WHERE uri = $1"#,
-				&[&uri]
+				&[&uri],
 			)
 			.await?;
 
@@ -62,27 +59,31 @@ impl Query {
 		Ok(row.first().map(|row| User {
 			followers: row.get(0),
 			following: row.get(1),
-			notes: row.get(2)
+			notes: row.get(2),
 		}))
 	}
 
 	pub async fn get_instance_stats(
-		&self, host: &str
+		&self, host: &str,
 	) -> Result<Option<InstanceStats>, QueryError> {
 		let client = self.pool.get().await?;
 		let row = client
 			.query(
 				r#"SELECT "followersCount", "followingCount", "notesCount" FROM instance WHERE host = $1"#,
-				&[&host]
+				&[&host],
 			)
-			.await?;
+			.await;
+
+		debug!("instance stats: {:?}", row);
+
+		let row = row?;
 
 		info!("inst row: {:?}", row);
 
 		Ok(row.first().map(|row| InstanceStats {
 			followers: row.get(0),
 			following: row.get(1),
-			notes: row.get(2)
+			notes: row.get(2),
 		}))
 	}
 }

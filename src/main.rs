@@ -8,7 +8,7 @@ use serde_json::Value;
 use tokio::{
 	io::{self, AsyncWriteExt},
 	net::{TcpListener, TcpStream},
-	time::timeout
+	time::timeout,
 };
 use tracing::*;
 use url::Url;
@@ -42,7 +42,7 @@ struct Args {
 	ap_server_address: String,
 	#[arg(short = 'p', long, default_value_t = 3000)]
 	/// Port of the AP server.
-	ap_server_port: u16
+	ap_server_port: u16,
 }
 
 static AP_SERVER: OnceCell<(Ipv4Addr, u16)> = OnceCell::new();
@@ -58,12 +58,14 @@ async fn main() {
 
 	tracing_subscriber::fmt::init();
 
+	info!("Starting");
+
 	#[allow(clippy::unwrap_used)]
 	let query = Query::init(
 		&std::env::var("DB_HOST").unwrap(),
 		&std::env::var("DB_USER").unwrap(),
 		&std::env::var("DB_PASSWORD").unwrap(),
-		&std::env::var("DB_NAME").unwrap()
+		&std::env::var("DB_NAME").unwrap(),
 	)
 	.unwrap();
 
@@ -313,8 +315,6 @@ async fn handler(mut incoming_stream: TcpStream, query: Query) {
 		}
 	}
 
-	info!("Attempting Relay");
-
 	// passed all checks, admit
 	let mut server_stream = match TcpStream::connect((AP_SERVER.wait().0, AP_SERVER.wait().1)).await
 	{
@@ -336,8 +336,6 @@ async fn handler(mut incoming_stream: TcpStream, query: Query) {
 			return;
 		}
 	}
-
-	info!("Relaying");
 
 	// this buffers, if issues arise, just spawn two threads for each direction
 	// and use io::copy_buf with buffer size of 1
