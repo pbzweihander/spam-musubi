@@ -66,7 +66,12 @@ impl Query {
 	pub async fn get_instance_stats(
 		&self, host: &str,
 	) -> Result<Option<InstanceStats>, QueryError> {
-		let client = self.pool.get().await?;
+		let client = self.pool.get().await;
+
+		info!("client: {:?}", client);
+
+		let client = client?;
+
 		let row = client
 			.query(
 				r#"SELECT "followersCount", "followingCount", "notesCount" FROM instance WHERE host = $1"#,
