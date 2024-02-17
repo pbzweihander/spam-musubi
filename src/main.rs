@@ -8,8 +8,9 @@ use serde_json::Value;
 use tokio::{
 	io::{self, AsyncWriteExt},
 	net::{TcpListener, TcpStream},
-	time::timeout,
+	time::timeout
 };
+use tracing::*;
 use url::Url;
 
 const FILTER_CRITERION_TIMEOUT_MS: u64 = 100;
@@ -41,7 +42,7 @@ struct Args {
 	ap_server_address: String,
 	#[arg(short = 'p', long, default_value_t = 3000)]
 	/// Port of the AP server.
-	ap_server_port: u16,
+	ap_server_port: u16
 }
 
 static AP_SERVER: OnceCell<(Ipv4Addr, u16)> = OnceCell::new();
@@ -55,12 +56,14 @@ async fn main() {
 	#[allow(clippy::unwrap_used)]
 	AP_SERVER.set((args.ap_server_address.parse().unwrap(), args.ap_server_port)).unwrap();
 
+	tracing_subscriber::fmt::init();
+
 	#[allow(clippy::unwrap_used)]
 	let query = Query::init(
 		&std::env::var("DB_HOST").unwrap(),
 		&std::env::var("DB_USER").unwrap(),
 		&std::env::var("DB_PASSWORD").unwrap(),
-		&std::env::var("DB_NAME").unwrap(),
+		&std::env::var("DB_NAME").unwrap()
 	)
 	.unwrap();
 
@@ -114,7 +117,7 @@ async fn handler(mut incoming_stream: TcpStream, query: Query) {
 	.await
 	{
 		Ok(Ok(header)) => header,
-		_ => return,
+		_ => return
 	};
 
 	// malformed HTTP header
@@ -184,7 +187,7 @@ async fn handler(mut incoming_stream: TcpStream, query: Query) {
 		let content_length = match content_length {
 			Some(content_length) => content_length,
 			// i don't think requests to /inbox will actually have chunked encoding
-			_ => return,
+			_ => return
 		};
 		let content_type = if let Some(content_type) = content_type {
 			content_type
@@ -232,7 +235,7 @@ async fn handler(mut incoming_stream: TcpStream, query: Query) {
 
 		let ap_json: Value = match serde_json::from_slice(&body) {
 			Ok(ap_json) => ap_json,
-			Err(_) => return,
+			Err(_) => return
 		};
 
 		// spam detection part
@@ -258,18 +261,31 @@ async fn handler(mut incoming_stream: TcpStream, query: Query) {
 			.and_then(|a| a.parse::<Url>().ok())
 		{
 			Some(actor) => actor,
-			_ => return,
+			_ => return
 		};
 		let host = match actor.host_str() {
 			Some(host) => host,
-			_ => return,
+			_ => return
 		};
 		let instance_stats = match query.get_instance_stats(host).await {
 			Ok(Some(instance_stats)) => instance_stats,
-			_ => return,
+			_ => {
+				info!("Instance not found: {}", host);
+				return;
+			}
 		};
 		if instance_stats.followers == 0 && instance_stats.following == 0 {
-			return;
+			let user_stats = match query.get_user(actor.as_str()).await {
+				Ok(Some(user_stats)) => user_stats,
+				_ => {
+					info!("User not found: {}", actor);
+					return;
+				}
+			};
+			if user_stats.followers == 0 && user_stats.following == 0 {
+				info!("Spam detected: {}", actor);
+				return;
+			}
 		}
 	}
 
@@ -277,7 +293,7 @@ async fn handler(mut incoming_stream: TcpStream, query: Query) {
 	let mut server_stream = match TcpStream::connect((AP_SERVER.wait().0, AP_SERVER.wait().1)).await
 	{
 		Ok(server_stream) => server_stream,
-		_ => return,
+		_ => return
 	};
 
 	// send existing data
