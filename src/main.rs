@@ -17,7 +17,7 @@ mod query;
 
 use query::{Query, QueryOpMode};
 
-use crate::filter::Filter;
+use crate::filter::{Filter, RejectReason};
 
 #[derive(Parser, Debug)]
 #[command(version)]
@@ -119,7 +119,15 @@ async fn main() {
 						}
 					}
 					Err(reason) => {
-						info!("Rejected (in {}us): {:?}", now.elapsed().as_millis(), reason);
+						info!(
+							"Rejected (in {}us): {}",
+							now.elapsed().as_micros(),
+							match &reason {
+								RejectReason::Spam(actor, _) => format!("Spam from {}", actor),
+								_ => format!("{:?}", &reason),
+							}
+						);
+						debug!("{:?}", reason);
 					}
 				}
 			})

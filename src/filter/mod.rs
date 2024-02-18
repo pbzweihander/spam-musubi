@@ -41,8 +41,8 @@ pub enum RejectReason {
 	BadRequest(&'static str),
 	#[error("Invalid ActivityStream ({0}):\n{1}")]
 	InvalidRequest(&'static str, String),
-	#[error("Spam detected:\n{0}")]
-	Spam(String),
+	#[error("Spam detected:\n{1}")]
+	Spam(String, String),
 }
 
 impl Filter {
@@ -248,17 +248,20 @@ impl Filter {
 			"invalid actor (no host)",
 			String::from_utf8_lossy(&body).to_string(),
 		))?;
-		let instance_stats = query
-			.get_instance_stats(host)
-			.await?
-			.ok_or(RejectReason::Spam(String::from_utf8_lossy(&body).to_string()))?;
+		let instance_stats = query.get_instance_stats(host).await?.ok_or(RejectReason::Spam(
+			actor.to_string(),
+			String::from_utf8_lossy(&body).to_string(),
+		))?;
 		if instance_stats.followers < 5 && instance_stats.following < 5 {
-			let user_stats = query
-				.get_user(actor.as_str())
-				.await?
-				.ok_or(RejectReason::Spam(String::from_utf8_lossy(&body).to_string()))?;
+			let user_stats = query.get_user(actor.as_str()).await?.ok_or(RejectReason::Spam(
+				actor.to_string(),
+				String::from_utf8_lossy(&body).to_string(),
+			))?;
 			if user_stats.followers == 0 && user_stats.following == 0 {
-				return Err(RejectReason::Spam(String::from_utf8_lossy(&body).to_string()));
+				return Err(RejectReason::Spam(
+					actor.to_string(),
+					String::from_utf8_lossy(&body).to_string(),
+				));
 			}
 		}
 
