@@ -3,6 +3,7 @@
 use std::{env, net::Ipv4Addr};
 
 use clap::Parser;
+use dashmap::DashMap;
 use once_cell::sync::OnceCell;
 use tokio::{
 	io::{self, AsyncWriteExt},
@@ -46,6 +47,8 @@ struct Args {
 }
 
 static AP_SERVER: OnceCell<(Ipv4Addr, u16)> = OnceCell::new();
+static HOST: OnceCell<String> = OnceCell::new();
+static SERVERS_BEING_RAIDED: OnceCell<DashMap<String, (Instant, u32)>> = OnceCell::new();
 
 #[tokio::main]
 async fn main() {

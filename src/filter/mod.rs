@@ -4,11 +4,12 @@ use serde_json::Value;
 use thiserror::Error;
 use tokio::io;
 use tokio::net::TcpStream;
-use tokio::time::timeout;
+use tokio::time::{timeout, Instant};
 use tracing::*;
 use url::Url;
 
 use crate::query::Query;
+use crate::SERVERS_BEING_RAIDED;
 
 pub struct FilterBuilder {}
 
@@ -18,6 +19,7 @@ pub struct Filter {}
 const FILTER_CRITERION_TIMEOUT_MS: u64 = 100;
 const HEADER_TIMEOUT_MS: u64 = 500;
 const BODY_TIMEOUT_MS: u64 = 1000;
+const SKETCHY_INSTANCE_THRESHOLD: i32 = 5;
 
 pub struct Admit {
 	pub incoming_stream: TcpStream,
@@ -147,12 +149,20 @@ impl Filter {
 		})
 		.await??;
 
-		// get content-length & content-type
+		// get host, content-length & content-type
 		let mut content_length = None;
 		let mut content_type = None;
 		for line in header.split(|&x| x == b'\n') {
-			if content_length.is_some() && content_type.is_some() {
+			if crate::HOST.get().is_some() && content_length.is_some() && content_type.is_some() {
 				break;
+			}
+			// might not be "safe" without reverse proxy in front
+			if crate::HOST.get().is_none()
+				&& (line.starts_with(b"Host: ") || line.starts_with(b"host: "))
+			{
+				if let Ok(h) = std::str::from_utf8(&line[6..line.len() - 1]) {
+					crate::HOST.set(h.to_string()).ok();
+				}
 			}
 			if content_length.is_none()
 				&& (line.starts_with(b"Content-Length: ") || line.starts_with(b"content-length: "))
@@ -230,6 +240,13 @@ impl Filter {
 			.and_then(|o| o.get("type"))
 			.and_then(|t| t.as_str())
 			.and_then(|t| if t == "Create" || t == "create" { Some(()) } else { None })
+			.is_none() || ap_json
+			.as_object()
+			.and_then(|o| o.get("object"))
+			.and_then(|o| o.as_object())
+			.and_then(|o| o.get("type"))
+			.and_then(|t| t.as_str())
+			.and_then(|t| if t == "Note" || t == "note" { Some(()) } else { None })
 			.is_none()
 		{
 			return Ok(Admit { incoming_stream, pending_header: header, pending_body: body });
@@ -248,20 +265,40 @@ impl Filter {
 			"invalid actor (no host)",
 			String::from_utf8_lossy(&body).to_string(),
 		))?;
-		let instance_stats = query.get_instance_stats(host).await?.ok_or(RejectReason::Spam(
-			actor.to_string(),
-			String::from_utf8_lossy(&body).to_string(),
-		))?;
-		if instance_stats.followers < 5 && instance_stats.following < 5 {
-			let user_stats = query.get_user(actor.as_str()).await?.ok_or(RejectReason::Spam(
-				actor.to_string(),
-				String::from_utf8_lossy(&body).to_string(),
-			))?;
-			if user_stats.followers == 0 && user_stats.following == 0 {
-				return Err(RejectReason::Spam(
-					actor.to_string(),
-					String::from_utf8_lossy(&body).to_string(),
-				));
+
+		// only check if this note generates notifications
+		if let Some(ccs) = ap_json
+			.as_object()
+			.and_then(|o| o.get("object"))
+			.and_then(|o| o.as_object())
+			.and_then(|o| o.get("cc"))
+			.and_then(|cc| cc.as_array())
+		{
+			if ccs
+				.iter()
+				.filter_map(|cc| cc.as_str().and_then(|cc| cc.parse::<Url>().ok()))
+				.any(|cc| cc.host_str() == crate::HOST.get().map(|s| s.as_str()))
+			{
+				let instance_stats =
+					query.get_instance_stats(host).await?.ok_or(RejectReason::Spam(
+						actor.to_string(),
+						String::from_utf8_lossy(&body).to_string(),
+					))?;
+				if instance_stats.followers < SKETCHY_INSTANCE_THRESHOLD
+					&& instance_stats.following < SKETCHY_INSTANCE_THRESHOLD
+				{
+					let user_stats =
+						query.get_user(actor.as_str()).await?.ok_or(RejectReason::Spam(
+							actor.to_string(),
+							String::from_utf8_lossy(&body).to_string(),
+						))?;
+					if user_stats.followers == 0 && user_stats.following == 0 {
+						return Err(RejectReason::Spam(
+							actor.to_string(),
+							String::from_utf8_lossy(&body).to_string(),
+						));
+					}
+				}
 			}
 		}
 
