@@ -1,5 +1,7 @@
 # spam-musubi
 
+![image](https://upload.wikimedia.org/wikipedia/commons/thumb/3/31/Homemade_Spam_Musubi.jpg/640px-Homemade_Spam_Musubi.jpg)
+
 Layer7 firewall for ActivityPub-compatible servers. IPv4 only.
 
 ## How to use
@@ -60,3 +62,7 @@ systemctl start spam-musubi
 - In your nginx settings, change the `proxy_pass` to point to spam-musubi. (port 21200 by default)
 
 > NOTE: it is not recommended to proxy websockets through spam_musubi
+
+---
+
+Icon By Chris Hackmann - Own work, CC BY-SA 4.0, https://commons.wikimedia.org/w/index.php?curid=43387131
