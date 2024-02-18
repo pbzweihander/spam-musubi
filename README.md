@@ -4,6 +4,39 @@
 
 Layer7 firewall for ActivityPub-compatible servers. IPv4 only.
 
+> IMPORTANT: your reverse proxy must be using HTTP/1.0 after TLS termination. spam-musubi doesn't support fancy HTTP.
+
+<details>
+    <summary>Sample nginx config snippet</summary>
+```
+server {
+    listen 443 ssl http2 default_server;
+    server_name activitypub.rocks;
+
+    --snip--
+
+    client_max_body_size 100M;
+
+    --snip--
+
+    # websocket should NOT be proxied through spam-musubi
+    location /streaming {
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection "upgrade";
+        proxy_pass "http://localhost:3000/streaming";
+    }
+
+    # everything else
+    location / {
+        --snip--
+        proxy_http_version 1.0;
+        proxy_pass http://localhost:21200/;
+    }
+}
+```
+</details>
+
 ## How to use
 
 > I assume you are using nginx or some sort of reverse proxy.
