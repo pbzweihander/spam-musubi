@@ -8,6 +8,7 @@ Layer7 firewall for ActivityPub-compatible servers. IPv4 only.
 
 <details>
     <summary>Sample nginx config snippet</summary>
+
 ```
 server {
     listen 443 ssl http2 default_server;
@@ -35,6 +36,7 @@ server {
     }
 }
 ```
+
 </details>
 
 ## How to use
