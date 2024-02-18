@@ -24,6 +24,10 @@ cargo build --release
 
 - Run `cargo run --release -- --help` and find out what args you'll need.
 
+- At this stage, I would recommend testing it (run spam-musubi on tmux, and temporaily change nginx settings), before you make it permanent using systemd daemons below.
+
+- Particularly, ensure that your server can receive non-spam notes from other instances. If you see false positives, 99% of the time it means that follower / following count checking with DB is bad. You can run with `RUST_LOG=debug cargo run --release` to see which step went wrong.
+
 - As sudo, create a new systemd daemon:
 
 ```
@@ -33,9 +37,9 @@ Description=Spam Musubi
 
 [Service]
 Type=simple
-User=yourusernamehere
-ExecStart=/pathtorepo/target/release/spam-musubi
-WorkingDirectory=/pathtorepo
+User=<your username here>
+ExecStart=/<path to repo>/target/release/spam-musubi
+WorkingDirectory=/<path to repo>
 Environment="DB_HOST=ip_address_to_db"
 Environment="DB_PORT=5432"
 Environment="DB_USER=your_db_username"
@@ -44,7 +48,7 @@ Environment="DB_NAME=misskey"
 TimeoutSec=60
 StandardOutput=syslog
 StandardError=syslog
-SyslogIdentifier=spammusubi
+SyslogIdentifier=spam-musubi
 Restart=always
 
 [Install]
@@ -61,7 +65,19 @@ systemctl start spam-musubi
 
 - In your nginx settings, change the `proxy_pass` to point to spam-musubi. (port 21200 by default)
 
+- Run `nginx -t && systemctl restart nginx` as sudo to apply nginx changes. 
+
 > NOTE: it is not recommended to proxy websockets through spam_musubi
+
+## How to update
+- Once you have systemd daemon set up, updating is easy!
+
+```
+cd <path to repo>
+git pull
+cargo build --release
+sudo systemctl restart spam-musubi
+```
 
 ---
 
