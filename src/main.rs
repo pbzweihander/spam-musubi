@@ -7,6 +7,7 @@ use once_cell::sync::OnceCell;
 use tokio::{
 	io::{self, AsyncWriteExt},
 	net::{TcpListener, TcpStream},
+	time::Instant,
 };
 use tracing::*;
 
@@ -15,6 +16,8 @@ mod filter;
 mod query;
 
 use query::{Query, QueryOpMode};
+
+use crate::filter::Filter;
 
 #[derive(Parser, Debug)]
 #[command(version)]
@@ -76,6 +79,8 @@ async fn main() {
 	.await
 	.unwrap();
 
+	let filter = Filter::builder().build();
+
 	let listener = TcpListener::bind((bind_address, args.outside_port))
 		.await
 		.expect("Could not bind to said address & port. Is the port in use?");
@@ -83,8 +88,10 @@ async fn main() {
 	loop {
 		if let Ok((stream, _)) = listener.accept().await {
 			let query = query.clone();
+			let filter = filter.clone();
 			tokio::spawn(async move {
-				match filter::handler(stream, query).await {
+				let now = Instant::now();
+				match filter.handler(stream, query).await {
 					Ok(mut admit) => {
 						match TcpStream::connect((AP_SERVER.wait().0, AP_SERVER.wait().1)).await {
 							Ok(mut server_stream) => {
@@ -115,7 +122,7 @@ async fn main() {
 						}
 					}
 					Err(reason) => {
-						info!("Rejected: {:?}", reason);
+						info!("Rejected (in {}us): {:?}", now.elapsed().as_millis(), reason);
 					}
 				}
 			})
