@@ -57,11 +57,8 @@ async fn main() {
 	AP_SERVER.set((args.ap_server_address.parse().unwrap(), args.ap_server_port)).unwrap();
 
 	match env::var("RUST_LOG") {
-		Ok(s) if !s.contains('=') && !s.contains(',') => {
-			env::set_var("RUST_LOG", format!("{}={}", env!("CARGO_PKG_NAME"), s));
-		}
 		Ok(_) => {}
-		Err(_) => env::set_var("RUST_LOG", format!("{}=info", env!("CARGO_PKG_NAME"))),
+		Err(_) => env::set_var("RUST_LOG", "info"),
 	}
 	tracing_subscriber::fmt::init();
 
