@@ -21,7 +21,7 @@ const SKETCHY_INSTANCE_THRESHOLD: i32 = 5;
 pub struct Admit {
 	pub incoming_stream: TcpStream,
 	pub pending_header: Vec<u8>,
-	pub pending_body: Vec<u8>
+	pub pending_body: Vec<u8>,
 }
 
 #[derive(Error, Debug)]
@@ -41,7 +41,7 @@ pub enum RejectReason {
 	#[error("Invalid ActivityStream ({0}):\n{1}")]
 	InvalidRequest(&'static str, String),
 	#[error("Spam detected:\n{1}")]
-	Spam(String, String)
+	Spam(String, String),
 }
 
 impl Filter {
@@ -59,7 +59,7 @@ impl FilterBuilder {
 
 impl Filter {
 	pub async fn handler(
-		&self, incoming_stream: TcpStream, query: Query
+		&self, incoming_stream: TcpStream, query: Query,
 	) -> Result<Admit, RejectReason> {
 		trace!("New connection from: {:?}", incoming_stream.peer_addr());
 
@@ -222,7 +222,7 @@ impl Filter {
 		let ap_json = sonic_rs::from_slice::<Value>(&body).map_err(|_| {
 			RejectReason::InvalidRequest(
 				"malformed JSON",
-				String::from_utf8_lossy(&body).to_string()
+				String::from_utf8_lossy(&body).to_string(),
 			)
 		})?;
 
@@ -252,11 +252,11 @@ impl Filter {
 			.and_then(|a| a.parse::<Url>().ok())
 			.ok_or(RejectReason::InvalidRequest(
 				"invalid actor",
-				String::from_utf8_lossy(&body).to_string()
+				String::from_utf8_lossy(&body).to_string(),
 			))?;
 		let host = actor.host_str().ok_or(RejectReason::InvalidRequest(
 			"invalid actor (no host)",
-			String::from_utf8_lossy(&body).to_string()
+			String::from_utf8_lossy(&body).to_string(),
 		))?;
 
 		// only check if this note generates notifications
@@ -271,7 +271,7 @@ impl Filter {
 				let instance_stats =
 					query.get_instance_stats(host).await?.ok_or(RejectReason::Spam(
 						actor.to_string(),
-						String::from_utf8_lossy(&body).to_string()
+						String::from_utf8_lossy(&body).to_string(),
 					))?;
 				if instance_stats.followers < SKETCHY_INSTANCE_THRESHOLD
 					&& instance_stats.following < SKETCHY_INSTANCE_THRESHOLD
@@ -279,12 +279,12 @@ impl Filter {
 					let user_stats =
 						query.get_user(actor.as_str()).await?.ok_or(RejectReason::Spam(
 							actor.to_string(),
-							String::from_utf8_lossy(&body).to_string()
+							String::from_utf8_lossy(&body).to_string(),
 						))?;
 					if user_stats.followers == 0 && user_stats.following == 0 {
 						return Err(RejectReason::Spam(
 							actor.to_string(),
-							String::from_utf8_lossy(&body).to_string()
+							String::from_utf8_lossy(&body).to_string(),
 						));
 					}
 				}

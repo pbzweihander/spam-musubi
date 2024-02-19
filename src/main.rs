@@ -7,7 +7,7 @@ use once_cell::sync::OnceCell;
 use tokio::{
 	io::{self, AsyncWriteExt},
 	net::{TcpListener, TcpStream},
-	time::Instant
+	time::Instant,
 };
 use tracing::*;
 
@@ -42,7 +42,7 @@ struct Args {
 	ap_server_port: u16,
 	#[arg(short = 't', long, default_value = "misskey")]
 	/// What server are we using?
-	server_type: QueryOpMode
+	server_type: QueryOpMode,
 }
 
 static AP_SERVER: OnceCell<(Ipv4Addr, u16)> = OnceCell::new();
@@ -59,7 +59,7 @@ async fn main() {
 
 	match env::var("RUST_LOG") {
 		Ok(_) => {}
-		Err(_) => env::set_var("RUST_LOG", "info")
+		Err(_) => env::set_var("RUST_LOG", "info"),
 	}
 	tracing_subscriber::fmt::init();
 
@@ -72,7 +72,7 @@ async fn main() {
 		&std::env::var("DB_USER").unwrap(),
 		&std::env::var("DB_PASSWORD").unwrap(),
 		&std::env::var("DB_NAME").unwrap(),
-		args.server_type
+		args.server_type,
 	)
 	.await
 	.unwrap();
@@ -110,7 +110,7 @@ async fn main() {
 								}
 								io::copy_bidirectional(
 									&mut admit.incoming_stream,
-									&mut server_stream
+									&mut server_stream,
 								)
 								.await
 								.ok();
@@ -126,7 +126,7 @@ async fn main() {
 							now.elapsed().as_micros(),
 							match &reason {
 								RejectReason::Spam(actor, _) => format!("Spam from {}", actor),
-								_ => format!("{}", &reason)
+								_ => format!("{}", &reason),
 							}
 						);
 						debug!("{}", reason);
