@@ -41,6 +41,10 @@ server {
 
 ## How to use
 
+TL;DR: (internet)->(reverse proxy like nginx)->(spam_musubi)->(AP server like Misskey)
+
+Below is for servers running nginx on host - your setup may vary.
+
 > I assume you are using nginx or some sort of reverse proxy.
 >
 > If you aren't, you should use one to limit request payload size, etc.
