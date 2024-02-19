@@ -19,6 +19,9 @@ RUN cargo build --release
 
 FROM debian:stable-slim AS runtime
 
+RUN apt-get update && \
+    apt-get install -y ca-certificates
+
 COPY --from=builder /app/target/release/spam-musubi /usr/local/bin
 
 CMD ["spam-musubi"]
